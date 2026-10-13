@@ -346,7 +346,7 @@ class PortraitOverlayController(private val context: Context) {
         const val KEY_USER_ROTATION = "user_rotation"
         const val LANDSCAPE_BUTTON_VISIBLE_MS = 6_000L
         const val FLOATING_BUTTON_RECHECK_MS = 1_000L
-        const val LANDSCAPE_CONTROL_WAIT_MS = 3_000L
+        const val LANDSCAPE_CONTROL_WAIT_MS = 10_000L
         const val LANDSCAPE_CONTROL_RECHECK_MS = 200L
         val LANDSCAPE_CONTROL_TOKEN = Any()
     }
