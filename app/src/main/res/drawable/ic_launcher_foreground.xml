@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Phone silhouette kept inside the adaptive-icon safe zone. -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M38,23 L70,23 Q75,23 75,29 L75,79 Q75,85 70,85 L38,85 Q33,85 33,79 L33,29 Q33,23 38,23 Z" />
+    <path
+        android:fillColor="#0B1220"
+        android:pathData="M40,29 L68,29 Q70,29 70,31 L70,73 Q70,75 68,75 L40,75 Q38,75 38,73 L38,31 Q38,29 40,29 Z" />
+    <path
+        android:fillColor="#94A3B8"
+        android:pathData="M47,78 L61,78 Q62,78 62,79 Q62,80 61,80 L47,80 Q46,80 46,79 Q46,78 47,78 Z" />
+
+    <!-- Cyan rotation arrow wrapping around the phone. -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M27,47 Q24,37 30,30 Q37,22 48,23 L45,18 L58,22 L52,34 L49,28 Q41,27 36,32 Q32,37 34,44 Z" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M81,61 Q84,71 78,78 Q71,86 60,85 L63,90 L50,86 L56,74 L59,80 Q67,81 72,76 Q76,71 74,64 Z" />
+</vector>

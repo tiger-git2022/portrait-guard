@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">竖屏守护</string>
+    <string name="accessibility_service_description">仅检测你选择的应用，并在它们位于前台时临时固定为竖屏。</string>
+</resources>
