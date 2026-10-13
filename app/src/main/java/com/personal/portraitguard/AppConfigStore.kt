@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,6 +24,8 @@ private val Context.dataStore by preferencesDataStore(name = "portrait_guard")
 object AppConfigStore {
     private val appsKey = stringPreferencesKey("guarded_apps")
     private val hideRecentTaskKey = booleanPreferencesKey("hide_recent_task")
+    private val lastUpdateCheckKey = longPreferencesKey("last_update_check")
+    private val ignoredUpdateKey = intPreferencesKey("ignored_update_version_code")
     private lateinit var appContext: Context
 
     fun initialize(context: Context) {
@@ -36,6 +40,20 @@ object AppConfigStore {
 
     suspend fun setHideRecentTask(hide: Boolean) {
         appContext.dataStore.edit { preferences -> preferences[hideRecentTaskKey] = hide }
+    }
+
+    val lastUpdateCheck: Flow<Long>
+        get() = appContext.dataStore.data.map { preferences -> preferences[lastUpdateCheckKey] ?: 0L }
+
+    val ignoredUpdateVersionCode: Flow<Int>
+        get() = appContext.dataStore.data.map { preferences -> preferences[ignoredUpdateKey] ?: 0 }
+
+    suspend fun setLastUpdateCheck(timeMillis: Long) {
+        appContext.dataStore.edit { preferences -> preferences[lastUpdateCheckKey] = timeMillis }
+    }
+
+    suspend fun setIgnoredUpdateVersionCode(versionCode: Int) {
+        appContext.dataStore.edit { preferences -> preferences[ignoredUpdateKey] = versionCode }
     }
 
     suspend fun addOrUpdate(app: GuardedApp) {

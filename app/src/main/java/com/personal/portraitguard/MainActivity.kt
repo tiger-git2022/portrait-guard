@@ -104,6 +104,9 @@ private fun PortraitGuardScreen(activity: MainActivity) {
     val scope = rememberCoroutineScope()
     var permissions by remember { mutableStateOf(activity.permissionState()) }
     var showPicker by remember { mutableStateOf(false) }
+    val updater = rememberUpdateController()
+
+    LaunchedEffect(Unit) { updater.autoCheck() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -144,6 +147,7 @@ private fun PortraitGuardScreen(activity: MainActivity) {
                         },
                     )
                 }
+                item { UpdateCard(updater) }
                 item {
                     Text("已配置应用", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                 }
@@ -171,6 +175,8 @@ private fun PortraitGuardScreen(activity: MainActivity) {
             }
         }
     }
+
+    UpdateDialogs(updater)
 
     if (showPicker) {
         AppPickerDialog(
