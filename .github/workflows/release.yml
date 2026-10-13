@@ -1,0 +1,132 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VERSION_NAME: 1.0.${{ github.run_number }}
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  # Runs with a read-only token. Signing secrets are only exposed to publishing runs;
+  # pull request check builds use the debug key.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Decode signing keystore
+        if: env.PUBLISH == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is missing; refusing to publish a debug-signed APK."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        if: env.PUBLISH == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Build check APK (debug-signed)
+        if: env.PUBLISH != 'true'
+        run: ./gradlew --no-daemon --stacktrace :app:assembleRelease
+
+      - name: Verify signature
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK"
+          mkdir -p dist
+          cp "$APK" "dist/PortraitGuard-v$VERSION_NAME.apk"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: PortraitGuard-v${{ env.VERSION_NAME }}
+          path: dist/*.apk
+          if-no-files-found: error
+
+  # Only this job gets a write token, and it never runs pull request code.
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: PortraitGuard-v${{ env.VERSION_NAME }}
+          path: dist
+
+      - name: Write release notes
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          {
+            echo "versionCode: ${{ github.run_number }}"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "### 自 $PREV_TAG 以来的更新"
+              RANGE="$PREV_TAG..HEAD"
+            else
+              echo "### 更新内容"
+              RANGE="HEAD"
+            fi
+            echo
+            COMMITS=$(git log --no-merges --format='- %s (%h)' $RANGE)
+            echo "${COMMITS:-- 无新提交（重新构建）}"
+          } > notes.md
+          cat notes.md
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v$VERSION_NAME"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+            exit 0
+          fi
+          # A re-run of an older build must not take the "latest" pointer from a newer release,
+          # because the app's update check reads /releases/latest.
+          HIGHEST=$(git tag --list 'v1.0.*' | sed 's/^v1\.0\.//' | grep -E '^[0-9]+$' | sort -n | tail -1)
+          LATEST=--latest
+          if [ -n "$HIGHEST" ] && [ "$HIGHEST" -gt "${{ github.run_number }}" ]; then
+            LATEST=--latest=false
+          fi
+          gh release create "$TAG" dist/*.apk \
+            --title "竖屏守护 $TAG" \
+            --notes-file notes.md \
+            --target "$GITHUB_SHA" \
+            "$LATEST"

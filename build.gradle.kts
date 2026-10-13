@@ -5,10 +5,13 @@ plugins {
 }
 
 // Keep generated files outside OneDrive so its sync process cannot lock resource outputs mid-build.
-val localBuildRoot = file(System.getProperty("user.home"))
-    .resolve(".gradle/project-builds/portrait-guard")
+// CI uses the default build/ directories so outputs stay inside the workspace.
+if (System.getenv("CI") == null) {
+    val localBuildRoot = file(System.getProperty("user.home"))
+        .resolve(".gradle/project-builds/portrait-guard")
 
-layout.buildDirectory.set(localBuildRoot.resolve("root"))
-subprojects {
-    layout.buildDirectory.set(localBuildRoot.resolve(name))
+    layout.buildDirectory.set(localBuildRoot.resolve("root"))
+    subprojects {
+        layout.buildDirectory.set(localBuildRoot.resolve(name))
+    }
 }

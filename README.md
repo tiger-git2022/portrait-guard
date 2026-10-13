@@ -12,6 +12,14 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 - Returning to the system home screen also removes the portrait overlay and floating action icon.
 - Disabling or deleting an active rule also removes the overlay immediately.
 
+## Releases and updates
+
+Every push to `main` (or a manual run of the **Build & Release** workflow) builds a signed release APK and publishes it as a GitHub release tagged `v1.0.<run number>`. The run number is also the `versionCode`, and the release notes list the commits since the previous release. Pull requests only run a debug-signed check build and never see the signing secrets.
+
+Release signing reads `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` from the environment; CI decodes the `KEYSTORE_BASE64` secret into `KEYSTORE_FILE`. Without these variables, local release builds use the debug key and get `versionCode` 1.
+
+The app checks the latest GitHub release at most once a day on launch (silently) and from the 应用更新 card on demand. Updating downloads the APK and hands it to the system installer, which needs the "Install unknown apps" permission for 竖屏守护. An APK signed with a different key (for example a local debug build) cannot be updated in place; uninstall it once before installing a release build.
+
 ## Install and test
 
 1. Build and install the debug APK with Android Studio, or run `gradlew.bat :app:assembleDebug` from this folder.

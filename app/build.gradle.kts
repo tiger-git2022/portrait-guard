@@ -4,6 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// CI passes GITHUB_RUN_NUMBER so every published build gets a higher versionCode.
+val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+
+// Release signing comes from the environment (see .github/workflows/release.yml).
+// Without it, release builds fall back to the debug key so local builds keep working.
+val releaseKeystore = System.getenv("KEYSTORE_FILE")?.let(::file)?.takeIf { it.isFile }
+
 android {
     namespace = "com.personal.portraitguard"
     compileSdk = 35
@@ -12,8 +19,25 @@ android {
         applicationId = "com.personal.portraitguard"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures { compose = true }
