@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Intent
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,11 @@ class PortraitAccessibilityService : AccessibilityService() {
     private var hideFloatingAfterUnlock = false
     private var foregroundPackage: String? = null
     private var lastForegroundUsageCheckAt = System.currentTimeMillis()
+
+    // Activities that are started and not yet stopped, per package, from UsageStats events.
+    // A small window, notification popup or translucent page on top of the guarded app
+    // resumes another package without stopping the guarded app, so it is not treated as leaving.
+    private val visibleActivities = mutableMapOf<String, MutableSet<String>>()
     private val homePackageName: String? by lazy {
         Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
             .resolveActivity(packageManager)
@@ -83,9 +89,7 @@ class PortraitAccessibilityService : AccessibilityService() {
             if (target == null) {
                 if (confirmedForeground) {
                     foregroundPackage = packageName
-                    if (activePackage != null || overlayController.hasPendingRotationState) {
-                        leaveTargetForeground()
-                    }
+                    leaveTargetIfHidden()
                 }
                 return@launch
             }
@@ -118,17 +122,45 @@ class PortraitAccessibilityService : AccessibilityService() {
         lastForegroundUsageCheckAt = now
         val event = UsageEvents.Event()
         var latestResumedPackage: String? = null
+        var activePackageStopped = false
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
-            if (event.eventType == USAGE_EVENT_ACTIVITY_RESUMED) {
-                latestResumedPackage = event.packageName
+            when (event.eventType) {
+                USAGE_EVENT_ACTIVITY_RESUMED -> {
+                    latestResumedPackage = event.packageName
+                    // Home covers the whole screen, which also clears any stale entries.
+                    if (event.packageName == homePackageName) visibleActivities.clear()
+                    visibleActivities.getOrPut(event.packageName) { mutableSetOf() }.add(event.className.orEmpty())
+                }
+                USAGE_EVENT_ACTIVITY_STOPPED -> {
+                    visibleActivities[event.packageName]?.let { classNames ->
+                        classNames.remove(event.className.orEmpty())
+                        if (classNames.isEmpty()) visibleActivities.remove(event.packageName)
+                    }
+                    if (event.packageName == activePackage) activePackageStopped = true
+                }
             }
         }
-        latestResumedPackage?.let { packageName ->
+        if (latestResumedPackage != null) {
             handleForegroundPackage(
-                packageName = packageName,
+                packageName = latestResumedPackage,
                 confirmedForeground = true,
             )
+        } else if (activePackageStopped && foregroundPackage != activePackage) {
+            // Another app came to the front earlier, but the guarded app only stopped now.
+            leaveTargetIfHidden()
+        }
+    }
+
+    private fun isStillVisible(packageName: String): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            visibleActivities[packageName].orEmpty().isNotEmpty()
+
+    private fun leaveTargetIfHidden() {
+        val active = activePackage
+        if (active != null && isStillVisible(active)) return
+        if (active != null || overlayController.hasPendingRotationState) {
+            leaveTargetForeground()
         }
     }
 
@@ -167,5 +199,7 @@ class PortraitAccessibilityService : AccessibilityService() {
 
     private companion object {
         const val USAGE_EVENT_ACTIVITY_RESUMED = 1
+        // UsageEvents.Event.ACTIVITY_STOPPED, reported from Android 10 (API 29).
+        const val USAGE_EVENT_ACTIVITY_STOPPED = 23
     }
 }
