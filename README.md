@@ -10,6 +10,8 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 - It also writes the portrait display rotation while the guard is active, which helps vendor ROMs that ignore an overlay request until the current display rotation is updated.
 - Tap the floating action icon to remove the portrait overlay and restore automatic system rotation.
 - Returning to the system home screen also removes the portrait overlay and floating action icon.
+- Small windows, notification popups or translucent pages from other apps that open on top of the guarded app do not count as leaving it, as long as the guarded app stays visible (Android 10+, uses Usage Access).
+- When you return to a guarded app from the background, the floating action icon reappears once the app has rotated back to landscape.
 - Disabling or deleting an active rule also removes the overlay immediately.
 
 ## Releases and updates
