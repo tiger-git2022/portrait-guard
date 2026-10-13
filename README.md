@@ -14,7 +14,7 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 
 ## Releases and updates
 
-Every push to `main` (or a manual run of the **Build & Release** workflow) builds a signed release APK and publishes it as a GitHub release tagged `v1.0.<run number>`. The run number is also the `versionCode`, and the release notes list the commits since the previous release. Pull requests only run a check build.
+Every push to `main` (or a manual run of the **Build & Release** workflow) builds a signed release APK and publishes it as a GitHub release tagged `v1.0.<run number>`. The run number is also the `versionCode`, and the release notes list the commits since the previous release. Pull requests only run a debug-signed check build and never see the signing secrets.
 
 Release signing reads `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` from the environment; CI decodes the `KEYSTORE_BASE64` secret into `KEYSTORE_FILE`. Without these variables, local release builds use the debug key and get `versionCode` 1.
 
