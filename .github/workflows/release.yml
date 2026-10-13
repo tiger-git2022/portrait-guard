@@ -7,22 +7,25 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  VERSION_NAME: 1.0.${{ github.run_number }}
+  PUBLISH: ${{ github.event_name != 'pull_request' }}
+
 jobs:
+  # Runs with a read-only token. Signing secrets are only exposed to publishing runs;
+  # pull request check builds use the debug key.
   build:
     runs-on: ubuntu-latest
-    env:
-      VERSION_NAME: 1.0.${{ github.run_number }}
-      PUBLISH: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-java@v6
         with:
@@ -30,7 +33,6 @@ jobs:
           java-version: 21
           cache: gradle
 
-      # Signing secrets are only exposed to publishing runs; pull request check builds use the debug key.
       - name: Decode signing keystore
         if: env.PUBLISH == 'true'
         env:
@@ -64,13 +66,30 @@ jobs:
           cp "$APK" "dist/PortraitGuard-v$VERSION_NAME.apk"
 
       - uses: actions/upload-artifact@v7
-        if: env.PUBLISH != 'true'
         with:
           name: PortraitGuard-v${{ env.VERSION_NAME }}
           path: dist/*.apk
+          if-no-files-found: error
+
+  # Only this job gets a write token, and it never runs pull request code.
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: PortraitGuard-v${{ env.VERSION_NAME }}
+          path: dist
 
       - name: Write release notes
-        if: env.PUBLISH == 'true'
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           {
@@ -86,21 +105,28 @@ jobs:
             echo
             COMMITS=$(git log --no-merges --format='- %s (%h)' $RANGE)
             echo "${COMMITS:-- 无新提交（重新构建）}"
-          } > dist/notes.md
-          cat dist/notes.md
+          } > notes.md
+          cat notes.md
 
       - name: Publish GitHub release
-        if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           TAG="v$VERSION_NAME"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" dist/*.apk --clobber
-          else
-            gh release create "$TAG" dist/*.apk \
-              --title "竖屏守护 $TAG" \
-              --notes-file dist/notes.md \
-              --target "$GITHUB_SHA" \
-              --latest
+            exit 0
           fi
+          # A re-run of an older build must not take the "latest" pointer from a newer release,
+          # because the app's update check reads /releases/latest.
+          HIGHEST=$(git tag --list 'v1.0.*' | sed 's/^v1\.0\.//' | grep -E '^[0-9]+$' | sort -n | tail -1)
+          LATEST=--latest
+          if [ -n "$HIGHEST" ] && [ "$HIGHEST" -gt "${{ github.run_number }}" ]; then
+            LATEST=--latest=false
+          fi
+          gh release create "$TAG" dist/*.apk \
+            --title "竖屏守护 $TAG" \
+            --notes-file notes.md \
+            --target "$GITHUB_SHA" \
+            "$LATEST"
