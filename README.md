@@ -30,7 +30,7 @@
 
 release 签名从环境变量读取 `KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS` 和 `KEY_PASSWORD`；CI 把 `KEYSTORE_BASE64` secret 解码成 `KEYSTORE_FILE`。没有这些变量时，本地 release 构建使用 debug 签名，`versionCode` 为 1。
 
-App 启动时每天最多静默检查一次最新的 GitHub Release，也可以在“应用更新”卡片里手动检查。更新会下载 APK 并交给系统安装器，需要给竖屏守护开启“安装未知应用”权限。签名不同的 APK（例如本地 debug 构建）不能直接覆盖安装，需要先卸载一次再安装 release 版本。
+App 启动时每天最多静默检查一次最新的 GitHub Release（读取发布附件 `update.json`，不受 GitHub API 每小时 60 次的限制），也可以在“应用更新”卡片里手动检查。更新会下载 APK 并交给系统安装器，需要给竖屏守护开启“安装未知应用”权限。签名不同的 APK（例如本地 debug 构建）不能直接覆盖安装，需要先卸载一次再安装 release 版本。
 
 ### 安装与测试
 
@@ -71,7 +71,7 @@ Every push to `main` (or a manual run of the **Build & Release** workflow) build
 
 Release signing reads `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` from the environment; CI decodes the `KEYSTORE_BASE64` secret into `KEYSTORE_FILE`. Without these variables, local release builds use the debug key and get `versionCode` 1.
 
-The app checks the latest GitHub release at most once a day on launch (silently) and from the 应用更新 card on demand. Updating downloads the APK and hands it to the system installer, which needs the "Install unknown apps" permission for 竖屏守护. An APK signed with a different key (for example a local debug build) cannot be updated in place; uninstall it once before installing a release build.
+The app checks the latest GitHub release (through its `update.json` asset, which avoids the GitHub API's 60-requests-an-hour limit) at most once a day on launch (silently) and from the 应用更新 card on demand. Updating downloads the APK and hands it to the system installer, which needs the "Install unknown apps" permission for 竖屏守护. An APK signed with a different key (for example a local debug build) cannot be updated in place; uninstall it once before installing a release build.
 
 ### Install and test
 
