@@ -17,8 +17,8 @@
 - 可以添加多个可启动的应用，分别配置。
 - 每条规则有独立的开关，以及解锁后是否显示悬浮按钮的设置。
 - 进入已启用的应用时，创建一个透明、不可触摸的无障碍覆盖层来请求竖屏，并显示一个可拖动的悬浮按钮。
-- 守护期间还会把系统显示方向写成竖屏，适配那些在当前显示方向改变之前会忽略覆盖层请求的厂商系统。
-- 点悬浮按钮会移除竖屏覆盖层，恢复系统自动旋转。
+- 系统开着自动旋转时，守护期间还会把系统显示方向写成竖屏，适配那些在当前显示方向改变之前会忽略覆盖层请求的厂商系统。系统本来就锁定竖屏时不会改动这项设置。
+- 点悬浮按钮会移除竖屏覆盖层，把系统旋转设置恢复成守护前的样子；守护期间你自己改过的旋转设置会保留。
 - 回到系统桌面也会移除竖屏覆盖层和悬浮按钮。
 - 其他应用在被守护应用上方打开的小窗、通知弹窗或半透明页面不算离开，只要被守护应用仍然可见（Android 10+，需要“使用情况访问权限”）。
 - 从后台回到被守护应用时，等它转回横屏后悬浮按钮会重新出现。
@@ -37,7 +37,7 @@ App 启动时每天最多静默检查一次最新的 GitHub Release（读取发�
 1. 用 Android Studio 编译安装 debug APK，或在仓库目录运行 `gradlew.bat :app:assembleDebug`。
 2. 打开 App，授予无障碍、悬浮窗（显示在其他应用上层）、修改系统设置、忽略电池优化权限。
 3. 添加目标游戏，设置时长，然后打开它的开关。
-4. 打开目标游戏，确认它变成竖屏且可以正常触摸，离开游戏或计时结束后恢复自动旋转。
+4. 打开目标游戏，确认它变成竖屏且可以正常触摸，离开游戏或计时结束后恢复原来的旋转设置。
 
 最终效果取决于 vivo Android 16 是否接受无障碍覆盖层对特定游戏的方向请求。如果某个游戏或系统版本拒绝，需要另做 Shizuku/Root 实现。
 
@@ -58,8 +58,8 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 - Configure multiple launchable apps independently.
 - Each rule has its own enable switch and post-unlock floating-button setting.
 - Entering an enabled app creates a transparent, non-touchable accessibility overlay that requests portrait orientation and shows a draggable floating action icon.
-- It also writes the portrait display rotation while the guard is active, which helps vendor ROMs that ignore an overlay request until the current display rotation is updated.
-- Tap the floating action icon to remove the portrait overlay and restore automatic system rotation.
+- If system auto-rotate is on, it also writes the portrait display rotation while the guard is active, which helps vendor ROMs that ignore an overlay request until the current display rotation is updated. A system already locked to portrait is left untouched.
+- Tap the floating action icon to remove the portrait overlay and put the system rotation setting back the way it was before the guard; a rotation setting you changed yourself during the guard is kept.
 - Returning to the system home screen also removes the portrait overlay and floating action icon.
 - Small windows, notification popups or translucent pages from other apps that open on top of the guarded app do not count as leaving it, as long as the guarded app stays visible (Android 10+, uses Usage Access).
 - When you return to a guarded app from the background, the floating action icon reappears once the app has rotated back to landscape.
@@ -78,7 +78,7 @@ The app checks the latest GitHub release (through its `update.json` asset, which
 1. Build and install the debug APK with Android Studio, or run `gradlew.bat :app:assembleDebug` from this folder.
 2. Open the app, grant Accessibility, Display over other apps, Modify system settings, and Ignore battery optimizations.
 3. Add the target game, set its duration, then enable its switch.
-4. Open the target game and verify it becomes portrait, remains touchable, then returns to automatic rotation when you leave or the timer ends.
+4. Open the target game and verify it becomes portrait, remains touchable, then returns to your original rotation setting when you leave or the timer ends.
 
 The final behavior depends on vivo Android 16 accepting the accessibility overlay's orientation request for the specific game. Games or ROM releases that reject it need a separate Shizuku/Root implementation.
 
