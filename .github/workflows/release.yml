@@ -112,7 +112,14 @@ jobs:
       # The app reads this from /releases/latest/download/update.json: release downloads have no request
       # limit, unlike api.github.com (60 requests an hour per IP without login, often used up on mobile networks).
       - name: Write update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          # A rerun of a published version keeps its notes: with its tag already there, notes.md lists no commits.
+          if gh release view "v$VERSION_NAME" > /dev/null 2>&1; then
+            gh release view "v$VERSION_NAME" --json body --jq .body > notes.md
+          fi
           APK=$(ls dist/*.apk | head -n 1)
           jq -n \
             --arg tag "v$VERSION_NAME" \
