@@ -4,4 +4,19 @@
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
+
+    <!-- The window of the glass floating button and message (GlassOverlayWindow): no frame, dim, animation or minimum size. -->
+    <style name="GlassOverlayWindow" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <!-- The system blurs only behind translucent windows. -->
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowElevation">0dp</item>
+        <item name="android:windowMinWidthMajor">0dp</item>
+        <item name="android:windowMinWidthMinor">0dp</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+    </style>
 </resources>
