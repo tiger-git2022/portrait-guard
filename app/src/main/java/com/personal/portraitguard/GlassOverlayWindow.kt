@@ -129,13 +129,16 @@ class GlassOverlayWindow(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val shown = runCatching { showBlurred() }.getOrElse { failure ->
                 Log.w(TAG, "Blurred overlay failed, showing a plain one", failure)
-                dialog = null
                 false
             }
             if (shown) {
                 isBlurred = true
                 return true
             }
+            // Undo a half-made dialog, so the content can go into the plain window.
+            dialog?.let { runCatching { it.dismiss() } }
+            dialog = null
+            (content.parent as? ViewGroup)?.removeView(content)
         }
         return runCatching {
             windowManager.addView(content, params)
@@ -151,6 +154,7 @@ class GlassOverlayWindow(
         val token = tokenSource() ?: return false
         val overlayDialog = Dialog(context, R.style.GlassOverlayWindow)
         overlayDialog.setCancelable(false)
+        dialog = overlayDialog
         overlayDialog.setContentView(
             content,
             ViewGroup.LayoutParams(
@@ -185,7 +189,6 @@ class GlassOverlayWindow(
         attributes.title = params.title
         window.attributes = attributes
         overlayDialog.show()
-        dialog = overlayDialog
         return true
     }
 
