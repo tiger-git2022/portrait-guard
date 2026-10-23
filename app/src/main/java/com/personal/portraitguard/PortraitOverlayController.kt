@@ -156,7 +156,6 @@ class PortraitOverlayController(private val context: Context) {
             params.height = view.measuredHeight
             val window = glassWindow(view, params)
             if (window.show()) {
-                glass.blurred = window.isBlurred
                 messageView = window
                 mainHandler.postDelayed({
                     if (messageView === window) {
@@ -224,7 +223,6 @@ class PortraitOverlayController(private val context: Context) {
             }
         }
         if (window.show()) {
-            glass.blurred = window.isBlurred
             actionButton = window
             actionButtonGlass = glass
             scheduleActionButtonAutoHide(window)

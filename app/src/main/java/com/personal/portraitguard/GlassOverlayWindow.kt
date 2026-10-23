@@ -20,6 +20,7 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import java.util.function.Consumer
 import androidx.annotation.RequiresApi
 
 /*
@@ -123,7 +124,14 @@ class GlassOverlayWindow(
 
     /** Whether the system blurs the game behind this window. */
     var isBlurred = false
-        private set
+        private set(value) {
+            field = value
+            // The glass under the content follows: light over the blur, nearly opaque without it.
+            (content.background as? LiquidGlassDrawable)?.blurred = value
+        }
+
+    /** Follows the system turning blur off and on (e.g. battery saver) while the blurred window is shown. */
+    private var blurListener: Consumer<Boolean>? = null
 
     fun show(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -133,6 +141,7 @@ class GlassOverlayWindow(
             }
             if (shown) {
                 isBlurred = true
+                listenForBlurChanges()
                 return true
             }
             // Undo a half-made dialog, so the content can go into the plain window.
@@ -192,6 +201,15 @@ class GlassOverlayWindow(
         return true
     }
 
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun listenForBlurChanges() {
+        val listener = Consumer<Boolean> { enabled -> if (dialog != null) isBlurred = enabled }
+        runCatching {
+            windowManager.addCrossWindowBlurEnabledListener(context.mainExecutor, listener)
+            blurListener = listener
+        }
+    }
+
     /** Moves the window to [params]' position. */
     fun updatePosition() {
         val window = dialog?.window
@@ -206,6 +224,10 @@ class GlassOverlayWindow(
     }
 
     fun remove() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            blurListener?.let { runCatching { windowManager.removeCrossWindowBlurEnabledListener(it) } }
+        }
+        blurListener = null
         dialog?.let { runCatching { it.dismiss() } }
         dialog = null
         if (plain) runCatching { windowManager.removeView(content) }
