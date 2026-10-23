@@ -12,7 +12,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
-import android.graphics.drawable.GradientDrawable
+import android.os.IBinder
 import android.view.MotionEvent
 import android.widget.TextView
 import android.widget.ImageView
@@ -25,8 +25,11 @@ class PortraitOverlayController(private val context: Context) {
 
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private var overlay: View? = null
-    private var messageView: View? = null
-    private var actionButton: View? = null
+    private var messageView: GlassOverlayWindow? = null
+    private var actionButton: GlassOverlayWindow? = null
+    private var actionButtonGlass: LiquidGlassDrawable? = null
+    private var overlayToken: IBinder? = null
+    private val density = context.resources.displayMetrics.density
     private var rotationStateBeforeGuard: RotationState? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val rotationPreferences =
@@ -99,9 +102,8 @@ class PortraitOverlayController(private val context: Context) {
         mainHandler.removeCallbacksAndMessages(null)
         overlay?.let { view -> runCatching { windowManager.removeView(view) } }
         overlay = null
-        actionButton?.let { view -> runCatching { windowManager.removeView(view) } }
-        actionButton = null
-        messageView?.let { view -> runCatching { windowManager.removeView(view) } }
+        removeActionButton()
+        messageView?.remove()
         messageView = null
         restoreRotationState()
     }
@@ -114,25 +116,26 @@ class PortraitOverlayController(private val context: Context) {
         if (hideFloating) {
             removeActionButton()
         } else {
-            (actionButton as? ImageView)?.apply {
-                alpha = 0.45f
-                background = circularBackground(Color.argb(220, 51, 65, 85))
-            }
+            // Off: gray glass, the icon faded.
+            actionButtonGlass?.tint = INACTIVE_TINT
+            actionButton?.content?.alpha = 0.55f
             actionButton?.let { button -> scheduleActionButtonAutoHide(button) }
         }
     }
 
     fun showMessage(message: String) {
         mainHandler.post {
-            messageView?.let { view -> runCatching { windowManager.removeView(view) } }
+            messageView?.remove()
+            messageView = null
+            val glass = LiquidGlassDrawable(MESSAGE_TINT, blurred = false, density = density)
             val view = TextView(context).apply {
                 text = message
                 setTextColor(Color.WHITE)
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                setPadding(28, 16, 28, 16)
-                setBackgroundColor(Color.argb(220, 15, 23, 42))
-                alpha = 0.96f
+                setPadding(40, 20, 40, 20)
+                setShadowLayer(4f, 0f, 1f, Color.argb(120, 0, 0, 0))
+                background = glass
             }
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -147,12 +150,17 @@ class PortraitOverlayController(private val context: Context) {
                 y = 52
                 title = "竖屏守护状态"
             }
-            runCatching {
-                windowManager.addView(view, params)
-                messageView = view
+            // A fixed size, so the blurred area is exactly the pill.
+            view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            params.width = view.measuredWidth
+            params.height = view.measuredHeight
+            val window = glassWindow(view, params)
+            if (window.show()) {
+                glass.blurred = window.isBlurred
+                messageView = window
                 mainHandler.postDelayed({
-                    if (messageView === view) {
-                        runCatching { windowManager.removeView(view) }
+                    if (messageView === window) {
+                        window.remove()
                         messageView = null
                     }
                 }, 2200L)
@@ -163,13 +171,13 @@ class PortraitOverlayController(private val context: Context) {
     fun close() = unlock()
 
     private fun showActionButton(onManualUnlock: () -> Unit) {
-        actionButton?.let { view -> runCatching { windowManager.removeView(view) } }
+        removeActionButton()
+        val glass = LiquidGlassDrawable(ACTIVE_TINT, blurred = false, density = density)
         val button = ImageView(context).apply {
             setImageResource(com.personal.portraitguard.R.drawable.ic_unlock_rotation)
             contentDescription = "解除竖屏"
-            setPadding(22, 22, 22, 22)
-            background = circularBackground(Color.argb(235, 8, 145, 178))
-            elevation = 12f
+            setPadding(26, 26, 26, 26)
+            background = glass
         }
         val params = WindowManager.LayoutParams(
             116,
@@ -183,6 +191,7 @@ class PortraitOverlayController(private val context: Context) {
             y = 180
             title = "竖屏守护按钮"
         }
+        val window = glassWindow(button, params)
         var downX = 0f
         var downY = 0f
         var startX = params.x
@@ -202,7 +211,7 @@ class PortraitOverlayController(private val context: Context) {
                     if (kotlin.math.abs(moveX) > 6 || kotlin.math.abs(moveY) > 6) {
                         params.x = (startX - moveX).coerceAtLeast(0)
                         params.y = (startY + moveY).coerceAtLeast(0)
-                        runCatching { windowManager.updateViewLayout(button, params) }
+                        window.updatePosition()
                     }
                     true
                 }
@@ -214,14 +223,27 @@ class PortraitOverlayController(private val context: Context) {
                 else -> true
             }
         }
-        runCatching {
-            windowManager.addView(button, params)
-            actionButton = button
-            scheduleActionButtonAutoHide(button)
+        if (window.show()) {
+            glass.blurred = window.isBlurred
+            actionButton = window
+            actionButtonGlass = glass
+            scheduleActionButtonAutoHide(window)
         }
     }
 
-    private fun scheduleActionButtonAutoHide(button: View) {
+    private fun glassWindow(view: View, params: WindowManager.LayoutParams) = GlassOverlayWindow(
+        context = context,
+        windowManager = windowManager,
+        content = view,
+        params = params,
+        // Fully rounded: a circle for the button, a pill for the message.
+        cornerRadius = params.height / 2f,
+        tokenSource = {
+            overlayToken ?: GlassOverlayWindow.probeToken(context, windowManager).also { overlayToken = it }
+        },
+    )
+
+    private fun scheduleActionButtonAutoHide(button: GlassOverlayWindow) {
         val shownInLandscape =
             context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         var hasBeenPortrait = !shownInLandscape
@@ -246,15 +268,10 @@ class PortraitOverlayController(private val context: Context) {
         mainHandler.post(hideCheck)
     }
 
-    private fun circularBackground(color: Int) = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        setColor(color)
-        setStroke(2, Color.argb(180, 255, 255, 255))
-    }
-
     private fun removeActionButton() {
-        actionButton?.let { view -> runCatching { windowManager.removeView(view) } }
+        actionButton?.remove()
         actionButton = null
+        actionButtonGlass = null
     }
 
     private fun rememberRotationState() {
@@ -369,6 +386,11 @@ class PortraitOverlayController(private val context: Context) {
         const val LANDSCAPE_CONTROL_WAIT_MS = 10_000L
         const val LANDSCAPE_CONTROL_RECHECK_MS = 200L
         val LANDSCAPE_CONTROL_TOKEN = Any()
+
+        // The glass tints: cyan while the guard is on, gray while it is off, dark slate behind messages.
+        val ACTIVE_TINT = Color.argb(110, 8, 145, 178)
+        val INACTIVE_TINT = Color.argb(110, 51, 65, 85)
+        val MESSAGE_TINT = Color.argb(130, 15, 23, 42)
 
         // Auto-rotate off, locked to portrait: what the guard writes while it is on.
         val FORCED_ROTATION_STATE = RotationState(
