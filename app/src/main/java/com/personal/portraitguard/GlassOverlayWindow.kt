@@ -35,7 +35,7 @@ import androidx.annotation.RequiresApi
  */
 
 /** The glass surface: a pill or circle (fully rounded), a tint, a lit rim and a sheen. */
-class LiquidGlassDrawable(tint: Int, blurred: Boolean, private val density: Float) : Drawable() {
+class LiquidGlassDrawable(glassTint: Int, blurred: Boolean, private val density: Float) : Drawable() {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val sheen = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -44,7 +44,7 @@ class LiquidGlassDrawable(tint: Int, blurred: Boolean, private val density: Floa
     }
     private val rect = RectF()
 
-    var tint: Int = tint
+    var glassTint: Int = glassTint
         set(value) {
             field = value
             invalidateSelf()
@@ -82,8 +82,8 @@ class LiquidGlassDrawable(tint: Int, blurred: Boolean, private val density: Floa
         val inset = rim.strokeWidth / 2f
         rect.set(bounds.left + inset, bounds.top + inset, bounds.right - inset, bounds.bottom - inset)
         val radius = minOf(rect.width(), rect.height()) / 2f
-        val alpha = Color.alpha(tint)
-        fill.color = if (blurred) tint else Color.argb(maxOf(alpha, OPAQUE_TINT_ALPHA), Color.red(tint), Color.green(tint), Color.blue(tint))
+        val alpha = Color.alpha(glassTint)
+        fill.color = if (blurred) glassTint else Color.argb(maxOf(alpha, OPAQUE_TINT_ALPHA), Color.red(glassTint), Color.green(glassTint), Color.blue(glassTint))
         canvas.drawRoundRect(rect, radius, radius, fill)
         canvas.drawRoundRect(rect, radius, radius, sheen)
         canvas.drawRoundRect(rect, radius, radius, rim)

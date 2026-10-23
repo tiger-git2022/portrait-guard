@@ -117,7 +117,7 @@ class PortraitOverlayController(private val context: Context) {
             removeActionButton()
         } else {
             // Off: gray glass, the icon faded.
-            actionButtonGlass?.tint = INACTIVE_TINT
+            actionButtonGlass?.glassTint = INACTIVE_TINT
             actionButton?.content?.alpha = 0.55f
             actionButton?.let { button -> scheduleActionButtonAutoHide(button) }
         }
