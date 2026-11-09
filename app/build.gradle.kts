@@ -4,8 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// CI passes GITHUB_RUN_NUMBER so every published build gets a higher versionCode.
-val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+// MAJOR.MINOR: raise the minor for a new feature, the major for a big change. CI passes VERSION_NAME = X.Y.Z
+// (Z counts the releases of X.Y, see .github/workflows/release.yml); local builds stay at X.Y with versionCode 1.
+val baseVersionName = "1.2"
+val ciVersionName = System.getenv("VERSION_NAME")?.takeIf { it.isNotBlank() }
+val ciVersionParts = ciVersionName?.let { name ->
+    Regex("""(\d{1,2})\.(\d{1,3})\.(\d{1,4})""").matchEntire(name)?.groupValues?.drop(1)?.map(String::toInt)
+        ?: error("VERSION_NAME must be X.Y.Z, not $name")
+}
 
 // Release signing comes from the environment (see .github/workflows/release.yml).
 // Without it, release builds fall back to the debug key so local builds keep working.
@@ -19,8 +25,9 @@ android {
         applicationId = "com.personal.portraitguard"
         minSdk = 26
         targetSdk = 35
-        versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        // Same formula as AppUpdater.versionCodeOf, above the earlier CI builds (versionCode = run number)
+        versionCode = ciVersionParts?.let { (major, minor, patch) -> major * 10_000_000 + minor * 10_000 + patch } ?: 1
+        versionName = ciVersionName ?: baseVersionName
     }
 
     signingConfigs {

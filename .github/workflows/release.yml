@@ -13,8 +13,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Version scheme: semantic version, tag "vX.Y.Z". baseVersionName in app/build.gradle.kts holds X.Y: a change with a
+# new feature raises Y there, a big change raises X. Z counts the releases of X.Y from 0, so a fix needs no edit.
+# versionCode = X * 10000000 + Y * 10000 + Z, above the earlier "v1.0.<run>" releases (versionCode = run); the in-app
+# updater reads tags the same way (AppUpdater.versionCodeOf).
 env:
-  VERSION_NAME: 1.0.${{ github.run_number }}
   PUBLISH: ${{ github.event_name != 'pull_request' }}
 
 jobs:
@@ -22,10 +25,41 @@ jobs:
   # pull request check builds use the debug key.
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0 # tags, for the next version number
           persist-credentials: false
+
+      # Read by app/build.gradle.kts. A re-run of a released commit keeps its version.
+      - name: Compute version
+        id: version
+        run: |
+          set -euo pipefail
+          existing=$(git tag --points-at "$GITHUB_SHA" --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          series=$(sed -nE 's/^val baseVersionName = "([0-9]+\.[0-9]+)"$/\1/p' app/build.gradle.kts)
+          if [ -z "$series" ]; then
+            echo "::error::app/build.gradle.kts must have val baseVersionName = \"MAJOR.MINOR\""
+            exit 1
+          fi
+          if [ "$PUBLISH" = "true" ] && [ -n "$existing" ] && [[ "$existing" == "v$series."* ]]; then
+            version=${existing#v}
+          else
+            last=$(git tag --list "v${series}.*" | sed "s/^v${series}\.//" | grep -E '^[0-9]+$' | sort -n | tail -n 1 || true)
+            if [ -n "$last" ]; then patch=$(( last + 1 )); else patch=0; fi
+            version="$series.$patch"
+            # A lower X.Y would publish a release older than the latest one
+            newest=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+            if [ -n "$newest" ] && [ "$(printf '%s\n' "$newest" "v$version" | sort -V | tail -n 1)" != "v$version" ]; then
+              echo "::error::v$version would be older than $newest, raise baseVersionName"
+              exit 1
+            fi
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "Version v$version"
 
       - uses: actions/setup-java@v6
         with:
@@ -78,6 +112,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VERSION_NAME: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -94,7 +130,8 @@ jobs:
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
           {
-            echo "versionCode: ${{ github.run_number }}"
+            IFS=. read -r X Y Z <<< "$VERSION_NAME"
+            echo "versionCode: $(( X * 10000000 + Y * 10000 + Z ))"
             echo
             if [ -n "$PREV_TAG" ]; then
               echo "### 自 $PREV_TAG 以来的更新 / Changes since $PREV_TAG"
@@ -142,9 +179,9 @@ jobs:
           fi
           # A re-run of an older build must not take the "latest" pointer from a newer release,
           # because the app's update check reads /releases/latest.
-          HIGHEST=$(git tag --list 'v1.0.*' | sed 's/^v1\.0\.//' | grep -E '^[0-9]+$' | sort -n | tail -1)
+          HIGHEST=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
           LATEST=--latest
-          if [ -n "$HIGHEST" ] && [ "$HIGHEST" -gt "${{ github.run_number }}" ]; then
+          if [ -n "$HIGHEST" ] && [ "$(printf '%s\n' "$HIGHEST" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]; then
             LATEST=--latest=false
           fi
           gh release create "$TAG" dist/*.apk dist/update.json \

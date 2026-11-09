@@ -26,7 +26,7 @@
 
 ### 发布与更新
 
-每次推送 `main`（或手动运行 **Build & Release** 工作流）都会编译签名的 release APK，并发布为 GitHub Release，tag 为 `v1.0.<构建号>`。构建号同时是 `versionCode`，更新说明列出自上一个版本以来的提交。PR 只做 debug 签名的检查构建，拿不到签名 secrets。
+每次推送 `main`（或手动运行 **Build & Release** 工作流）都会编译签名的 release APK，并发布为 GitHub Release，tag 为 `vX.Y.Z`：`app/build.gradle.kts` 的 `baseVersionName` 记 X.Y，加新功能涨 Y，大改涨 X，Z 每次发布自动加一；`versionCode = X*10000000 + Y*10000 + Z`。2026-11 以前的版本是 `v1.0.<构建号>`。更新说明列出自上一个版本以来的提交。PR 只做 debug 签名的检查构建，拿不到签名 secrets。
 
 release 签名从环境变量读取 `KEYSTORE_FILE`、`KEYSTORE_PASSWORD`、`KEY_ALIAS` 和 `KEY_PASSWORD`；CI 把 `KEYSTORE_BASE64` secret 解码成 `KEYSTORE_FILE`。没有这些变量时，本地 release 构建使用 debug 签名，`versionCode` 为 1。
 
@@ -67,7 +67,7 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 
 ### Releases and updates
 
-Every push to `main` (or a manual run of the **Build & Release** workflow) builds a signed release APK and publishes it as a GitHub release tagged `v1.0.<run number>`. The run number is also the `versionCode`, and the release notes list the commits since the previous release. Pull requests only run a debug-signed check build and never see the signing secrets.
+Every push to `main` (or a manual run of the **Build & Release** workflow) builds a signed release APK and publishes it as a GitHub release tagged `vX.Y.Z`: `baseVersionName` in `app/build.gradle.kts` holds X.Y (a new feature raises Y, a big change X) and Z grows by one with each release; `versionCode = X*10000000 + Y*10000 + Z`. Releases before November 2026 were `v1.0.<run number>`. The release notes list the commits since the previous release. Pull requests only run a debug-signed check build and never see the signing secrets.
 
 Release signing reads `KEYSTORE_FILE`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` from the environment; CI decodes the `KEYSTORE_BASE64` secret into `KEYSTORE_FILE`. Without these variables, local release builds use the debug key and get `versionCode` 1.
 
