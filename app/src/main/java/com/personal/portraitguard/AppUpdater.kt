@@ -25,7 +25,7 @@ data class ReleaseInfo(
     val sha256: String?,
 )
 
-/** Checks GitHub Releases for a newer build and installs its APK. Release tags look like v1.0.<versionCode>. */
+/** Checks GitHub Releases for a newer build and installs its APK. Release tags look like v1.2.0 (older ones v1.0.<versionCode>). */
 object AppUpdater {
     private const val REPOSITORY = "https://github.com/tiger-git2022/portrait-guard"
     private const val UPDATE_MANIFEST_URL = "$REPOSITORY/releases/latest/download/update.json"
@@ -73,8 +73,17 @@ object AppUpdater {
         )
     }
 
-    private fun versionCodeOf(tag: String): Int =
-        Regex("""(\d+)$""").find(tag)?.value?.toIntOrNull() ?: throw IOException("无法从标签 $tag 解析版本号")
+    /**
+     * The versionCode of release [tag]. Old releases were "v1.0.<versionCode>" (the CI run); newer ones are
+     * "vX.Y.Z" with versionCode X * 10000000 + Y * 10000 + Z (see the release workflow), so 1.2.0 = 10020000 comes
+     * after every old one.
+     */
+    internal fun versionCodeOf(tag: String): Int {
+        val match = Regex("""^v?(\d{1,2})\.(\d{1,3})\.(\d{1,4})$""").matchEntire(tag.trim())
+            ?: throw IOException("无法从标签 $tag 解析版本号")
+        val (major, minor, patch) = match.destructured.toList().map(String::toInt)
+        return if (major == 1 && minor == 0) patch else major * 10_000_000 + minor * 10_000 + patch
+    }
 
     private fun fetchFromApi(): ReleaseInfo {
         val json = connect(LATEST_RELEASE_URL, "application/vnd.github+json").use { connection ->
