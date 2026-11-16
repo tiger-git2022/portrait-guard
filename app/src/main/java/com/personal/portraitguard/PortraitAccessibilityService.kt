@@ -193,6 +193,7 @@ class PortraitAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         stopSession()
+        if (::overlayController.isInitialized) overlayController.release()
         serviceScope.cancel()
         super.onDestroy()
     }

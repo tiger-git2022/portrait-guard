@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.content.pm.ActivityInfo
+import android.database.ContentObserver
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
@@ -34,6 +35,40 @@ class PortraitOverlayController(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val rotationPreferences =
         context.getSharedPreferences(ROTATION_STATE_PREFERENCES, Context.MODE_PRIVATE)
+
+    // From the first guard of a game until leaving it (also while unlocked with the button).
+    private var sessionActive = false
+
+    // Separate from mainHandler, whose callbacks unlock() clears.
+    private val settingsHandler = Handler(Looper.getMainLooper())
+    private val recordUserRotation = Runnable { recordUserRotationState() }
+    private var lastSeenRotationState: RotationState? = null
+    private val rotationObserver = object : ContentObserver(settingsHandler) {
+        override fun onChange(selfChange: Boolean) = onRotationSettingChanged()
+    }
+
+    init {
+        val currentState = readCurrentRotationState()
+        lastSeenRotationState = currentState
+        if (readPersistedRotationState() == null && readUserRotationState() == null) {
+            saveUserRotationState(currentState)
+            RotationLog.add(context, "记下你的旋转设置：${describe(currentState)}")
+        }
+        runCatching {
+            listOf(Settings.System.ACCELEROMETER_ROTATION, Settings.System.USER_ROTATION).forEach { name ->
+                context.contentResolver.registerContentObserver(
+                    Settings.System.getUriFor(name),
+                    false,
+                    rotationObserver,
+                )
+            }
+        }
+    }
+
+    fun release() {
+        settingsHandler.removeCallbacksAndMessages(null)
+        runCatching { context.contentResolver.unregisterContentObserver(rotationObserver) }
+    }
 
     val isPortraitLocked: Boolean
         get() = overlay != null
@@ -91,6 +126,8 @@ class PortraitOverlayController(private val context: Context) {
             }
             windowManager.addView(view, params)
             overlay = view
+            sessionActive = true
+            settingsHandler.removeCallbacks(recordUserRotation)
             showActionButton(onManualUnlock)
             rememberRotationState()
             forcePortraitRotation()
@@ -106,6 +143,11 @@ class PortraitOverlayController(private val context: Context) {
         messageView?.remove()
         messageView = null
         restoreRotationState()
+        sessionActive = false
+        // Whatever the settings settle on after leaving the game (a change the user made in the
+        // game included) is the user's setting from now on.
+        settingsHandler.removeCallbacks(recordUserRotation)
+        settingsHandler.postDelayed(recordUserRotation, USER_ROTATION_SETTLE_MS)
     }
 
     fun unlockPortrait(hideFloating: Boolean) {
@@ -287,12 +329,23 @@ class PortraitOverlayController(private val context: Context) {
             clearRotationState()
         }
         // Already locked to portrait: nothing needs writing, so nothing is restored later either.
-        if (currentState == FORCED_ROTATION_STATE) return
+        if (currentState == FORCED_ROTATION_STATE) {
+            RotationLog.add(context, "进入守护：系统已是${describe(currentState)}，不改动")
+            return
+        }
+        // By now the game or the ROM may have changed the settings while the game opened (for
+        // example locked to its landscape rotation). Put back the setting recorded while no
+        // guarded game was open instead, so a portrait lock does not come back as something else.
+        val userState = readUserRotationState() ?: currentState
         val saved = rotationPreferences.edit()
-            .putInt(KEY_ACCELEROMETER_ROTATION, currentState.accelerometerRotation)
-            .putInt(KEY_USER_ROTATION, currentState.userRotation)
+            .putInt(KEY_ACCELEROMETER_ROTATION, userState.accelerometerRotation)
+            .putInt(KEY_USER_ROTATION, userState.userRotation)
             .commit()
-        if (saved) rotationStateBeforeGuard = currentState
+        if (saved) rotationStateBeforeGuard = userState
+        RotationLog.add(
+            context,
+            "进入守护：系统是${describe(currentState)}，写成竖屏锁定，结束后恢复成${describe(userState)}",
+        )
     }
 
     private fun restoreRotationState() {
@@ -318,13 +371,84 @@ class PortraitOverlayController(private val context: Context) {
                     )
             userRotationRestored && accelerometerRotationRestored
         }.getOrDefault(false)
+        val changed = currentState.accelerometerRotation != FORCED_ROTATION_STATE.accelerometerRotation ||
+            currentState.userRotation != FORCED_ROTATION_STATE.userRotation
+        RotationLog.add(
+            context,
+            when {
+                !restored -> "恢复失败，系统仍是${describe(currentState)}"
+                changed -> "结束守护：系统是${describe(currentState)}，守护中被改过的项保留，其余恢复成${describe(previousState)}"
+                else -> "结束守护：恢复成${describe(previousState)}"
+            },
+        )
         if (restored) clearRotationState()
     }
 
     private fun clearRotationState() {
         rotationStateBeforeGuard = null
-        rotationPreferences.edit().clear().commit()
+        rotationPreferences.edit()
+            .remove(KEY_ACCELEROMETER_ROTATION)
+            .remove(KEY_USER_ROTATION)
+            .commit()
     }
+
+    /**
+     * The user's own rotation setting is what the settings hold while no guarded game is open.
+     * A change only counts once it has stayed for a moment, because a game that is opening (or
+     * the ROM's game mode) may change it just before the guard starts.
+     */
+    private fun onRotationSettingChanged() {
+        val state = readCurrentRotationState()
+        if (state != lastSeenRotationState) {
+            lastSeenRotationState = state
+            RotationLog.add(context, "系统旋转设置变为${describe(state)}" + if (sessionActive) "（守护中）" else "")
+        }
+        settingsHandler.removeCallbacks(recordUserRotation)
+        if (sessionActive || overlay != null) return
+        settingsHandler.postDelayed(recordUserRotation, USER_ROTATION_SETTLE_MS)
+    }
+
+    private fun recordUserRotationState() {
+        // A pending backup means a guard ended without restoring: the settings still hold its values.
+        if (sessionActive || overlay != null || readPersistedRotationState() != null) return
+        val state = readCurrentRotationState()
+        if (state == readUserRotationState()) return
+        saveUserRotationState(state)
+        RotationLog.add(context, "记下你的旋转设置：${describe(state)}")
+    }
+
+    private fun readUserRotationState(): RotationState? {
+        if (
+            !rotationPreferences.contains(KEY_USER_STATE_ACCELEROMETER_ROTATION) ||
+            !rotationPreferences.contains(KEY_USER_STATE_USER_ROTATION)
+        ) {
+            return null
+        }
+        return RotationState(
+            accelerometerRotation = rotationPreferences.getInt(KEY_USER_STATE_ACCELEROMETER_ROTATION, 1),
+            userRotation = rotationPreferences.getInt(KEY_USER_STATE_USER_ROTATION, android.view.Surface.ROTATION_0),
+        )
+    }
+
+    private fun saveUserRotationState(state: RotationState) {
+        rotationPreferences.edit()
+            .putInt(KEY_USER_STATE_ACCELEROMETER_ROTATION, state.accelerometerRotation)
+            .putInt(KEY_USER_STATE_USER_ROTATION, state.userRotation)
+            .commit()
+    }
+
+    private fun describe(state: RotationState) =
+        if (state.accelerometerRotation != 0) {
+            "自动旋转"
+        } else {
+            when (state.userRotation) {
+                android.view.Surface.ROTATION_0 -> "竖屏锁定"
+                android.view.Surface.ROTATION_90 -> "横屏锁定(90°)"
+                android.view.Surface.ROTATION_180 -> "倒置竖屏锁定"
+                android.view.Surface.ROTATION_270 -> "横屏锁定(270°)"
+                else -> "锁定(${state.userRotation})"
+            }
+        }
 
     private fun readCurrentRotationState() = RotationState(
         accelerometerRotation = Settings.System.getInt(
@@ -379,6 +503,10 @@ class PortraitOverlayController(private val context: Context) {
         const val ROTATION_STATE_PREFERENCES = "rotation_state_backup"
         const val KEY_ACCELEROMETER_ROTATION = "accelerometer_rotation"
         const val KEY_USER_ROTATION = "user_rotation"
+        // The setting seen while no guarded game is open (see recordUserRotationState).
+        const val KEY_USER_STATE_ACCELEROMETER_ROTATION = "user_state_accelerometer_rotation"
+        const val KEY_USER_STATE_USER_ROTATION = "user_state_user_rotation"
+        const val USER_ROTATION_SETTLE_MS = 1_500L
         const val LANDSCAPE_BUTTON_VISIBLE_MS = 6_000L
         const val FLOATING_BUTTON_RECHECK_MS = 1_000L
         const val LANDSCAPE_CONTROL_WAIT_MS = 10_000L

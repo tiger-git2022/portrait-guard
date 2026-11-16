@@ -19,6 +19,8 @@
 - 进入已启用的应用时，创建一个透明、不可触摸的无障碍覆盖层来请求竖屏，并显示一个可拖动的悬浮按钮。
 - 系统开着自动旋转时，守护期间还会把系统显示方向写成竖屏，适配那些在当前显示方向改变之前会忽略覆盖层请求的厂商系统。系统本来就锁定竖屏时不会改动这项设置。
 - 点悬浮按钮会移除竖屏覆盖层，把系统旋转设置恢复成守护前的样子；守护期间你自己改过的旋转设置会保留。
+- “守护前的样子”取的是没打开被守护应用时的旋转设置（变化稳定 1.5 秒后才记下），不是守护开始那一刻读到的值，因为游戏启动时游戏或厂商系统可能已经把它临时改成了横屏锁定或自动旋转。
+- 设置页的“旋转设置记录”列出最近守护读到、写入和恢复的旋转设置，旋转设置不对时可以复制出来排查。
 - 回到系统桌面也会移除竖屏覆盖层和悬浮按钮。
 - 其他应用在被守护应用上方打开的小窗、通知弹窗或半透明页面不算离开，只要被守护应用仍然可见（Android 10+，需要“使用情况访问权限”）。
 - 从后台回到被守护应用时，等它转回横屏后悬浮按钮会重新出现。
@@ -60,6 +62,8 @@ Self-use Android tool for temporarily forcing selected foreground apps into port
 - Entering an enabled app creates a transparent, non-touchable accessibility overlay that requests portrait orientation and shows a draggable floating action icon.
 - If system auto-rotate is on, it also writes the portrait display rotation while the guard is active, which helps vendor ROMs that ignore an overlay request until the current display rotation is updated. A system already locked to portrait is left untouched.
 - Tap the floating action icon to remove the portrait overlay and put the system rotation setting back the way it was before the guard; a rotation setting you changed yourself during the guard is kept.
+- "The way it was" is the rotation setting seen while no guarded app was open (a change counts once it has stayed for 1.5 seconds), not the value read the moment the guard starts, because the game or the vendor ROM may already have switched it to a landscape lock or auto-rotate while the game opened.
+- The "旋转设置记录" (rotation log) card on the settings screen lists what the guard recently read, wrote and put back, to copy out when the rotation setting ends up wrong.
 - Returning to the system home screen also removes the portrait overlay and floating action icon.
 - Small windows, notification popups or translucent pages from other apps that open on top of the guarded app do not count as leaving it, as long as the guarded app stays visible (Android 10+, uses Usage Access).
 - When you return to a guarded app from the background, the floating action icon reappears once the app has rotated back to landscape.
