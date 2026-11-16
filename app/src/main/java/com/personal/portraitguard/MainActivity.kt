@@ -130,7 +130,7 @@ private fun PortraitGuardScreen(activity: MainActivity) {
             ) {
                 item {
                     Text(
-                        "进入已启用的应用后固定正向竖屏，点击游戏内悬浮按钮手动恢复自动旋转。",
+                        "进入已启用的应用后固定正向竖屏，点击游戏内悬浮按钮恢复原来的旋转设置。",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 8.dp),
                     )
@@ -148,6 +148,7 @@ private fun PortraitGuardScreen(activity: MainActivity) {
                     )
                 }
                 item { UpdateCard(updater) }
+                item { RotationLogCard(activity) }
                 item {
                     Text("已配置应用", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
                 }
@@ -188,6 +189,58 @@ private fun PortraitGuardScreen(activity: MainActivity) {
                 showPicker = false
             },
         )
+    }
+}
+
+@Composable
+private fun RotationLogCard(context: Context) {
+    var expanded by remember { mutableStateOf(false) }
+    var lines by remember { mutableStateOf(RotationLog.read(context)) }
+    LaunchedEffect(expanded) {
+        while (expanded) {
+            lines = RotationLog.read(context)
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    Card {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("旋转设置记录", style = MaterialTheme.typography.titleMedium)
+                    Text("旋转设置不对时，展开看守护读到、写入和恢复了什么，可以复制出来排查。", style = MaterialTheme.typography.bodySmall)
+                }
+                TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起" else "展开") }
+            }
+            if (expanded) {
+                if (lines.isEmpty()) {
+                    Text("还没有记录", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    lines.takeLast(20).asReversed().forEach { line ->
+                        Text(line, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Row {
+                    FilledTonalButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("旋转设置记录", RotationLog.read(context).joinToString("\n")),
+                            )
+                            android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = lines.isNotEmpty(),
+                    ) { Text("复制全部") }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = {
+                            RotationLog.clear(context)
+                            lines = emptyList()
+                        },
+                        enabled = lines.isNotEmpty(),
+                    ) { Text("清空") }
+                }
+            }
+        }
     }
 }
 
